@@ -187,6 +187,16 @@ Route::prefix('v0')->group(function (): void {
         Route::get('device/{hostname}', [App\Api\Controllers\LegacyApiController::class, 'get_port_security'])->name('get_port_security_by_hostname');
         Route::get('', [App\Api\Controllers\LegacyApiController::class, 'get_port_security'])->name('get_port_security');
     });
+
+    // Enhanced SSL Verification endpoints
+    Route::prefix('enhanced/ssl_verification')->group(function (): void {
+        Route::get('', [App\Api\Controllers\LegacyApiController::class, 'list_ssl_verifications'])->name('list_ssl_verifications');
+        Route::get('{domain}', [App\Api\Controllers\LegacyApiController::class, 'get_ssl_verification'])->name('get_ssl_verification');
+        Route::post('', [App\Api\Controllers\LegacyApiController::class, 'add_ssl_verification'])->name('add_ssl_verification');
+        Route::put('{domain}', [App\Api\Controllers\LegacyApiController::class, 'update_ssl_verification'])->name('update_ssl_verification');
+        Route::delete('{domain}', [App\Api\Controllers\LegacyApiController::class, 'delete_ssl_verification'])->name('delete_ssl_verification');
+    });
+
     // Route not found
     Route::any('/{path?}', [App\Api\Controllers\LegacyApiController::class, 'api_not_found'])->where('path', '.*');
 });

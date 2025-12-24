@@ -19,6 +19,7 @@ use App\Models\Availability;
 use App\Models\Device;
 use App\Models\DeviceGroup;
 use App\Models\DeviceOutage;
+use App\Models\EnhancedSslVerification;
 use App\Models\Eventlog;
 use App\Models\Ipv4Address;
 use App\Models\Ipv4Mac;
@@ -3585,4 +3586,281 @@ function server_info()
     return api_success([
         $versions,
     ], 'system');
+}
+
+function list_ssl_verifications(Illuminate\Http\Request $request)
+{
+    // List all SSL verification records with optional filters
+    $query = EnhancedSslVerification::query();
+
+    // Filter by domain (exact match or partial)
+    if ($request->has('domain')) {
+        $domain = $request->get('domain');
+        if (str_contains($domain, '%') || str_contains($domain, '*')) {
+            $query->where('domain', 'LIKE', str_replace('*', '%', $domain));
+        } else {
+            $query->where('domain', $domain);
+        }
+    }
+
+    // Filter by validity status
+    if ($request->has('valid')) {
+        $query->where('valid', $request->get('valid') ? 1 : 0);
+    }
+
+    // Filter by expiring soon
+    if ($request->has('expiring_soon')) {
+        $days = $request->get('expiring_days', 30);
+        $query->expiringSoon($days);
+    }
+
+    // Filter by enabled status
+    if ($request->has('enabled')) {
+        $query->where('enabled', $request->get('enabled') ? 1 : 0);
+    } else {
+        // Default to only enabled if not specified
+        $query->enabled();
+    }
+
+    // Filter by device_id if provided
+    if ($request->has('device_id')) {
+        $query->where('device_id', $request->get('device_id'));
+    }
+
+    // Filter by check_failed
+    if ($request->has('check_failed')) {
+        $query->where('check_failed', $request->get('check_failed') ? 1 : 0);
+    }
+
+    // Ordering
+    $order = $request->get('order', 'domain');
+    $orderDir = $request->get('order_dir', 'asc');
+    if (in_array(strtolower($orderDir), ['asc', 'desc'])) {
+        $query->orderBy($order, $orderDir);
+    }
+
+    $results = $query->get()->toArray();
+
+    return api_success($results, 'ssl_verifications');
+}
+
+function get_ssl_verification(Illuminate\Http\Request $request)
+{
+    // Get a single SSL verification record by domain
+    $domain = $request->route('domain');
+
+    if (empty($domain)) {
+        return api_error(400, 'Domain is required');
+    }
+
+    $sslVerification = EnhancedSslVerification::where('domain', $domain)->first();
+
+    if (! $sslVerification) {
+        return api_error(404, "SSL verification for domain '$domain' not found");
+    }
+
+    return api_success([$sslVerification->toArray()], 'ssl_verifications');
+}
+
+function add_ssl_verification(Illuminate\Http\Request $request)
+{
+    // Add or update an SSL verification record (upsert)
+    $data = $request->json()->all();
+
+    if (empty($data)) {
+        return api_error(400, 'No data provided');
+    }
+
+    if (empty($data['domain'])) {
+        return api_error(400, 'Domain is required');
+    }
+
+    // Convert 'valid' from string 'yes'/'no' to boolean if needed
+    if (isset($data['valid'])) {
+        if (is_string($data['valid'])) {
+            $data['valid'] = strtolower($data['valid']) === 'yes' ? 1 : 0;
+        } else {
+            $data['valid'] = $data['valid'] ? 1 : 0;
+        }
+    }
+
+    // Convert date strings to datetime if needed
+    if (isset($data['valid_from']) && is_string($data['valid_from'])) {
+        try {
+            $data['valid_from'] = new \DateTime($data['valid_from']);
+        } catch (\Exception $e) {
+            return api_error(400, 'Invalid valid_from date format');
+        }
+    }
+
+    if (isset($data['valid_to']) && is_string($data['valid_to'])) {
+        try {
+            $data['valid_to'] = new \DateTime($data['valid_to']);
+        } catch (\Exception $e) {
+            return api_error(400, 'Invalid valid_to date format');
+        }
+    }
+
+    if (isset($data['lastChecked'])) {
+        $data['last_checked'] = $data['lastChecked'];
+        unset($data['lastChecked']);
+    }
+
+    if (isset($data['last_checked']) && is_string($data['last_checked'])) {
+        try {
+            $data['last_checked'] = new \DateTime($data['last_checked']);
+        } catch (\Exception $e) {
+            return api_error(400, 'Invalid last_checked date format');
+        }
+    }
+
+    // Handle days_until_expires conversion
+    if (isset($data['days_until_expires'])) {
+        $data['days_until_expires'] = (int) $data['days_until_expires'];
+    }
+
+    // Increment check count
+    $existing = EnhancedSslVerification::where('domain', $data['domain'])->first();
+    if ($existing) {
+        $data['check_count'] = ($existing->check_count ?? 0) + 1;
+    } else {
+        $data['check_count'] = 1;
+    }
+
+    // Set check_failed based on error_message or valid status
+    if (isset($data['error_message']) && ! empty($data['error_message'])) {
+        $data['check_failed'] = 1;
+    } elseif (isset($data['valid'])) {
+        $data['check_failed'] = $data['valid'] ? 0 : 1;
+    }
+
+    // Only allow fillable fields
+    $fillable = [
+        'domain',
+        'device_id',
+        'port',
+        'valid',
+        'days_until_expires',
+        'valid_from',
+        'valid_to',
+        'issuer',
+        'last_checked',
+        'check_count',
+        'error_message',
+        'check_failed',
+        'enabled',
+        'alert_on_expiring',
+        'alert_days_before',
+    ];
+
+    $updateData = Arr::only($data, $fillable);
+
+    // Upsert: update if exists, insert if not
+    $sslVerification = EnhancedSslVerification::updateOrCreate(
+        ['domain' => $data['domain']],
+        $updateData
+    );
+
+    $message = $existing ? "SSL verification for '{$data['domain']}' updated successfully" : "SSL verification for '{$data['domain']}' added successfully";
+
+    return api_success([$sslVerification->toArray()], 'ssl_verifications', $message, 200);
+}
+
+function update_ssl_verification(Illuminate\Http\Request $request)
+{
+    // Update an existing SSL verification record
+    $domain = $request->route('domain');
+    $data = $request->json()->all();
+
+    if (empty($domain)) {
+        return api_error(400, 'Domain is required');
+    }
+
+    if (empty($data)) {
+        return api_error(400, 'No data provided for update');
+    }
+
+    $sslVerification = EnhancedSslVerification::where('domain', $domain)->first();
+
+    if (! $sslVerification) {
+        return api_error(404, "SSL verification for domain '$domain' not found");
+    }
+
+    // Convert 'valid' from string if needed
+    if (isset($data['valid']) && is_string($data['valid'])) {
+        $data['valid'] = strtolower($data['valid']) === 'yes' ? 1 : 0;
+    }
+
+    // Convert date strings
+    if (isset($data['valid_from']) && is_string($data['valid_from'])) {
+        try {
+            $data['valid_from'] = new \DateTime($data['valid_from']);
+        } catch (\Exception $e) {
+            return api_error(400, 'Invalid valid_from date format');
+        }
+    }
+
+    if (isset($data['valid_to']) && is_string($data['valid_to'])) {
+        try {
+            $data['valid_to'] = new \DateTime($data['valid_to']);
+        } catch (\Exception $e) {
+            return api_error(400, 'Invalid valid_to date format');
+        }
+    }
+
+    if (isset($data['lastChecked'])) {
+        $data['last_checked'] = $data['lastChecked'];
+        unset($data['lastChecked']);
+    }
+
+    if (isset($data['last_checked']) && is_string($data['last_checked'])) {
+        try {
+            $data['last_checked'] = new \DateTime($data['last_checked']);
+        } catch (\Exception $e) {
+            return api_error(400, 'Invalid last_checked date format');
+        }
+    }
+
+    // Only allow fillable fields
+    $fillable = [
+        'device_id',
+        'port',
+        'valid',
+        'days_until_expires',
+        'valid_from',
+        'valid_to',
+        'issuer',
+        'last_checked',
+        'error_message',
+        'check_failed',
+        'enabled',
+        'alert_on_expiring',
+        'alert_days_before',
+    ];
+
+    $updateData = Arr::only($data, $fillable);
+    $sslVerification->update($updateData);
+
+    return api_success([$sslVerification->fresh()->toArray()], 'ssl_verifications', "SSL verification for '$domain' updated successfully");
+}
+
+function delete_ssl_verification(Illuminate\Http\Request $request)
+{
+    // Delete an SSL verification record
+    $domain = $request->route('domain');
+
+    if (empty($domain)) {
+        return api_error(400, 'Domain is required');
+    }
+
+    $sslVerification = EnhancedSslVerification::where('domain', $domain)->first();
+
+    if (! $sslVerification) {
+        return api_error(404, "SSL verification for domain '$domain' not found");
+    }
+
+    $domainName = $sslVerification->domain;
+    $sslVerification->delete();
+
+    return api_success_noresult(200, "SSL verification for '$domainName' deleted successfully");
 }
