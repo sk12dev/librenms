@@ -52,6 +52,9 @@ return [
     'server-stats' => [
         'title' => 'Server Stats',
     ],
+    'ssl-verification' => [
+        'title' => 'SSL Verification',
+    ],
     'syslog' => [
         'title' => 'Syslog',
     ],
