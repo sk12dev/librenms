@@ -191,6 +191,10 @@ class CheckSchemaStructure implements Validation, ValidationFixer
         }
 
         foreach ($current_schema as $table => $data) {
+            // Ignore tables with 'enhanced_' prefix as they are custom extensions
+            if (str_starts_with($table, 'enhanced_')) {
+                continue;
+            }
             $this->descriptions[] = "Database: extra table ($table)";
             $this->schema_update[] = $this->dropTableSql($table);
         }
