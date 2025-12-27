@@ -6,7 +6,15 @@ version 2.0.0
 Andy Hobbs - 12/20/2025
 """
 
-import dns.resolver
+try:
+    import dns.resolver
+except ImportError:
+    print("Error: 'dnspython' library is required.")
+    print("Install it using one of these methods:")
+    print("  1. System package: apt install python3-dnspython")
+    print("  2. User install: pip3 install --user dnspython")
+    sys.exit(1)
+
 import json
 import datetime
 import time
@@ -64,7 +72,13 @@ def read_domains(config_file: str = 'config.txt') -> List[str]:
                         domain = domain.split(':')[0]
                     domains.append(domain)
     except FileNotFoundError:
-        print(f"Warning: Config file '{config_file}' not found.")
+        print(f"Warning: Config file '{config_file}' not found. Creating example config file.")
+        with open(config_file, 'w', encoding='utf-8') as f:
+            f.write("# Add one domain or URL per line\n")
+            f.write("# Examples:\n")
+            f.write("# google.com\n")
+            f.write("# https://www.example.com\n")
+            f.write("# github.com\n")
     except Exception as e:
         print(f"Error reading config file: {e}")
     
