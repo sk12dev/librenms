@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 SSL Certificate Checker
-Checks SSL certificate validity for websites and stores results in JSON format.
-version 1.0.0
+Checks SSL certificate validity for websites and stores results via LibreNMS API.
+version 2.0.0
 Andy Hobbs - 12/20/2025
 """
 
@@ -10,12 +10,26 @@ import ssl
 import socket
 import json
 import datetime
-from urllib.parse import urlparse
-from typing import Dict, Any, Optional
+import configparser
+import sys
+import os
+from pathlib import Path
+from urllib.parse import urlparse, urljoin
+from typing import Dict, Any, Optional, List
+try:
+    import requests
+except ImportError:
+    print("Error: 'requests' library is required. Install it with: pip install requests")
+    sys.exit(1)
 
 
 def extract_domain(url: str) -> str:
-    """Extract domain name from URL."""
+    """
+    Extract domain name from URL.
+    
+    Note: This function is kept for backward compatibility but is no longer
+    used in the main workflow since domains come directly from the API.
+    """
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
     
@@ -89,86 +103,246 @@ def check_ssl_certificate(domain: str, port: int = 443, timeout: int = 10) -> Di
     return result
 
 
-def read_config(config_file: str = 'config.txt') -> list:
-    """Read website URLs from config file."""
-    urls = []
-    try:
-        with open(config_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):  # Skip empty lines and comments
-                    urls.append(line)
-    except FileNotFoundError:
-        print(f"Warning: Config file '{config_file}' not found. Creating empty config file.")
-        with open(config_file, 'w', encoding='utf-8') as f:
-            f.write("# Add one website URL per line\n")
-            f.write("# Example: example.com\n")
-            f.write("# Example: https://www.example.com\n")
-    except Exception as e:
-        print(f"Error reading config file: {e}")
+def load_api_config(config_file: str = 'api_config.ini') -> Dict[str, str]:
+    """
+    Load API configuration from config file.
     
-    return urls
-
-
-def load_json_data(json_file: str = 'ssl_check.json') -> Dict[str, Any]:
-    """Load existing JSON data or return empty dict."""
+    The config file is looked for in the following order:
+    1. Same directory as the script (preferred)
+    2. Current working directory
+    
+    Expected format (api_config.ini):
+    [api]
+    url = http://librenms.example.com
+    token = your-api-token-here
+    
+    Returns dictionary with 'url' and 'token' keys.
+    """
+    config = configparser.ConfigParser()
+    
+    # Get the script's directory
+    script_dir = Path(__file__).parent.absolute()
+    
+    # Try to find config file: first in script directory, then current working directory
+    config_paths = [
+        script_dir / config_file,  # Same directory as script
+        Path(config_file)  # Current working directory (absolute or relative)
+    ]
+    
+    config_path = None
+    for path in config_paths:
+        if path.exists():
+            config_path = path
+            break
+    
+    if config_path is None:
+        # Show helpful error with script directory location
+        print(f"Error: Config file '{config_file}' not found.")
+        print(f"Looked in:")
+        print(f"  1. {script_dir / config_file}")
+        print(f"  2. {Path(config_file).absolute()}")
+        print(f"\nPlease create '{config_file}' in the script directory ({script_dir})")
+        print(f"with the following format:")
+        print("[api]")
+        print("url = http://librenms.example.com")
+        print("token = your-api-token-here")
+        sys.exit(1)
+    
     try:
-        with open(json_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
-        print(f"Warning: Invalid JSON in '{json_file}'. Starting with empty data.")
-        return {}
-
-
-def save_json_data(data: Dict[str, Any], json_file: str = 'ssl_check.json') -> None:
-    """Save data to JSON file."""
-    try:
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        print(f"Results saved to '{json_file}'")
+        config.read(config_path)
+        
+        if 'api' not in config:
+            raise ValueError(f"Config file '{config_path}' missing [api] section")
+        
+        api_url = config.get('api', 'url', fallback=None)
+        api_token = config.get('api', 'token', fallback=None)
+        
+        if not api_url:
+            raise ValueError(f"Config file '{config_path}' missing 'url' in [api] section")
+        if not api_token:
+            raise ValueError(f"Config file '{config_path}' missing 'token' in [api] section")
+        
+        # Ensure URL doesn't end with trailing slash
+        api_url = api_url.rstrip('/')
+        
+        return {
+            'url': api_url,
+            'token': api_token
+        }
     except Exception as e:
-        print(f"Error saving JSON file: {e}")
+        print(f"Error reading config file '{config_path}': {e}")
+        sys.exit(1)
+
+
+def fetch_domains_from_api(api_url: str, api_token: str) -> List[Dict[str, Any]]:
+    """
+    Fetch enabled domains from LibreNMS API.
+    
+    Returns list of dictionaries with 'domain' and optionally 'port' fields.
+    """
+    endpoint = urljoin(api_url, '/api/v0/enhanced/ssl_verification')
+    headers = {
+        'X-Auth-Token': api_token,
+        'Content-Type': 'application/json'
+    }
+    params = {
+        'enabled': 1
+    }
+    
+    try:
+        response = requests.get(endpoint, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if data.get('status') != 'ok':
+            raise ValueError(f"API returned error status: {data.get('message', 'Unknown error')}")
+        
+        ssl_verifications = data.get('ssl_verifications', [])
+        
+        # Extract domain and port from each verification record
+        domains = []
+        for record in ssl_verifications:
+            domain_info = {
+                'domain': record.get('domain'),
+                'port': record.get('port', 443)  # Default to 443 if not specified
+            }
+            if domain_info['domain']:
+                domains.append(domain_info)
+        
+        return domains
+        
+    except requests.exceptions.Timeout:
+        raise Exception(f"API request timed out after 30 seconds")
+    except requests.exceptions.ConnectionError as e:
+        raise Exception(f"Failed to connect to API at {api_url}: {str(e)}")
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 401 or e.response.status_code == 403:
+            raise Exception(f"Authentication failed. Check your API token.")
+        raise Exception(f"API request failed with status {e.response.status_code}: {str(e)}")
+    except json.JSONDecodeError:
+        raise Exception(f"Invalid JSON response from API")
+    except Exception as e:
+        raise Exception(f"Error fetching domains from API: {str(e)}")
+
+
+def update_ssl_verification_via_api(api_url: str, api_token: str, domain: str, 
+                                   result: Dict[str, Any], port: int = 443) -> bool:
+    """
+    Update SSL verification data via LibreNMS API.
+    
+    Returns True if successful, False otherwise.
+    """
+    endpoint = urljoin(api_url, '/api/v0/enhanced/ssl_verification')
+    headers = {
+        'X-Auth-Token': api_token,
+        'Content-Type': 'application/json'
+    }
+    
+    # Prepare payload - map error to error_message
+    payload = {
+        'domain': domain,
+        'port': port,
+        'valid': result.get('valid', 'no'),
+        'days_until_expires': result.get('days_until_expires'),
+        'valid_from': result.get('valid_from'),
+        'valid_to': result.get('valid_to'),
+        'issuer': result.get('issuer'),
+        'lastChecked': result.get('lastChecked')
+    }
+    
+    # Map error field to error_message if present
+    if 'error' in result:
+        payload['error_message'] = result['error']
+    
+    # Remove None values
+    payload = {k: v for k, v in payload.items() if v is not None}
+    
+    try:
+        response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if data.get('status') != 'ok':
+            print(f"  Warning: API returned error status: {data.get('message', 'Unknown error')}")
+            return False
+        
+        return True
+        
+    except requests.exceptions.Timeout:
+        print(f"  Error: API request timed out after 30 seconds")
+        return False
+    except requests.exceptions.ConnectionError as e:
+        print(f"  Error: Failed to connect to API: {str(e)}")
+        return False
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 401 or e.response.status_code == 403:
+            print(f"  Error: Authentication failed. Check your API token.")
+        else:
+            print(f"  Error: API request failed with status {e.response.status_code}: {str(e)}")
+        return False
+    except json.JSONDecodeError:
+        print(f"  Error: Invalid JSON response from API")
+        return False
+    except Exception as e:
+        print(f"  Error: Failed to update SSL verification: {str(e)}")
+        return False
 
 
 def main():
-    """Main function to orchestrate SSL certificate checking."""
-    config_file = 'config.txt'
-    json_file = 'ssl_check.json'
+    """Main function to orchestrate SSL certificate checking via LibreNMS API."""
+    config_file = 'api_config.ini'
     
-    # Read URLs from config file
-    urls = read_config(config_file)
+    # Load API configuration
+    print(f"Loading API configuration from '{config_file}'...")
+    api_config = load_api_config(config_file)
+    api_url = api_config['url']
+    api_token = api_config['token']
     
-    if not urls:
-        print("No URLs found in config file. Please add URLs to check.")
+    # Fetch domains from API
+    print(f"Fetching enabled domains from LibreNMS API...")
+    try:
+        domains = fetch_domains_from_api(api_url, api_token)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    
+    if not domains:
+        print("No enabled domains found in LibreNMS. Please add domains via the web interface or API.")
         return
     
-    # Load existing JSON data
-    json_data = load_json_data(json_file)
+    # Check SSL certificates for each domain
+    print(f"Checking SSL certificates for {len(domains)} domain(s)...")
+    success_count = 0
+    fail_count = 0
     
-    # Check SSL certificates for each URL
-    print(f"Checking SSL certificates for {len(urls)} website(s)...")
-    for url in urls:
-        domain = extract_domain(url)
-        print(f"Checking {domain}...")
+    for domain_info in domains:
+        domain = domain_info['domain']
+        port = domain_info.get('port', 443)
+        
+        print(f"Checking {domain}:{port}...")
         
         # Check certificate
-        result = check_ssl_certificate(domain)
+        result = check_ssl_certificate(domain, port=port)
         
-        # Update JSON data
-        json_data[domain] = result
-        
-        # Print status
-        if result['valid'] == 'yes':
-            print(f"  ✓ Valid - Expires in {result['days_until_expires']} days")
+        # Update via API
+        if update_ssl_verification_via_api(api_url, api_token, domain, result, port):
+            success_count += 1
+            # Print status
+            if result['valid'] == 'yes':
+                print(f"  ✓ Valid - Expires in {result['days_until_expires']} days")
+            else:
+                error_msg = result.get('error', 'Certificate invalid')
+                print(f"  ✗ Invalid - {error_msg}")
         else:
-            error_msg = result.get('error', 'Certificate invalid')
-            print(f"  ✗ Invalid - {error_msg}")
+            fail_count += 1
     
-    # Save updated JSON data
-    save_json_data(json_data, json_file)
-    print("SSL certificate check complete.")
+    # Summary
+    print(f"\nSSL certificate check complete.")
+    print(f"  Successfully updated: {success_count}")
+    if fail_count > 0:
+        print(f"  Failed to update: {fail_count}")
 
 
 if __name__ == '__main__':
