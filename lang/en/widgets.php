@@ -28,6 +28,9 @@ return [
     'device-types' => [
         'title' => 'Device Types',
     ],
+    'dns-lookup' => [
+        'title' => 'DNS Lookup Latency',
+    ],
     'eventlog' => [
         'title' => 'Eventlog',
     ],

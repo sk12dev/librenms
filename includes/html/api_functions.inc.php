@@ -19,6 +19,7 @@ use App\Models\Availability;
 use App\Models\Device;
 use App\Models\DeviceGroup;
 use App\Models\DeviceOutage;
+use App\Models\EnhancedDnsLookup;
 use App\Models\EnhancedSslVerification;
 use App\Models\Eventlog;
 use App\Models\Ipv4Address;
@@ -3863,4 +3864,271 @@ function delete_ssl_verification(Illuminate\Http\Request $request)
     $sslVerification->delete();
 
     return api_success_noresult(200, "SSL verification for '$domainName' deleted successfully");
+}
+
+function list_dns_lookups(Illuminate\Http\Request $request)
+{
+    // List all DNS lookup records with optional filters
+    $query = EnhancedDnsLookup::query();
+
+    // Filter by domain (exact match or partial)
+    if ($request->has('domain')) {
+        $domain = $request->get('domain');
+        if (str_contains($domain, '%') || str_contains($domain, '*')) {
+            $query->where('domain', 'LIKE', str_replace('*', '%', $domain));
+        } else {
+            $query->where('domain', $domain);
+        }
+    }
+
+    // Filter by DNS server
+    if ($request->has('dns_server')) {
+        $dns_server = $request->get('dns_server');
+        if (str_contains($dns_server, '%') || str_contains($dns_server, '*')) {
+            $query->where('dns_server', 'LIKE', str_replace('*', '%', $dns_server));
+        } else {
+            $query->where('dns_server', $dns_server);
+        }
+    }
+
+    // Filter by enabled status
+    if ($request->has('enabled')) {
+        $query->where('enabled', $request->get('enabled') ? 1 : 0);
+    } else {
+        // Default to only enabled if not specified
+        $query->enabled();
+    }
+
+    // Filter by check_failed
+    if ($request->has('check_failed')) {
+        $query->where('check_failed', $request->get('check_failed') ? 1 : 0);
+    }
+
+    // Filter by slow latency threshold
+    if ($request->has('slow_threshold')) {
+        $threshold = (float) $request->get('slow_threshold');
+        $query->where('resolve_time_ms', '>', $threshold)
+              ->where('check_failed', 0);
+    }
+
+    // Filter by device_id if provided
+    if ($request->has('device_id')) {
+        $query->where('device_id', $request->get('device_id'));
+    }
+
+    // Ordering
+    $order = $request->get('order', 'resolve_time_ms');
+    $orderDir = $request->get('order_dir', 'desc');
+    if (in_array(strtolower($orderDir), ['asc', 'desc'])) {
+        $query->orderBy($order, $orderDir);
+    }
+
+    $results = $query->get()->toArray();
+
+    return api_success($results, 'dns_lookups');
+}
+
+function get_dns_lookup(Illuminate\Http\Request $request)
+{
+    // Get a single DNS lookup record by domain and dns_server
+    $domain = $request->route('domain');
+    $dns_server = $request->route('dns_server');
+
+    if (empty($domain)) {
+        return api_error(400, 'Domain is required');
+    }
+
+    if (empty($dns_server)) {
+        return api_error(400, 'DNS server is required');
+    }
+
+    $dnsLookup = EnhancedDnsLookup::where('domain', $domain)
+                                   ->where('dns_server', $dns_server)
+                                   ->first();
+
+    if (! $dnsLookup) {
+        return api_error(404, "DNS lookup for domain '$domain' and DNS server '$dns_server' not found");
+    }
+
+    return api_success([$dnsLookup->toArray()], 'dns_lookups');
+}
+
+function add_dns_lookup(Illuminate\Http\Request $request)
+{
+    // Add or update a DNS lookup record (upsert)
+    $data = $request->json()->all();
+
+    if (empty($data)) {
+        return api_error(400, 'No data provided');
+    }
+
+    if (empty($data['domain'])) {
+        return api_error(400, 'Domain is required');
+    }
+
+    if (empty($data['dns_server'])) {
+        return api_error(400, 'DNS server is required');
+    }
+
+    // Handle resolve_time_ms conversion
+    if (isset($data['resolve_time_ms'])) {
+        $data['resolve_time_ms'] = (float) $data['resolve_time_ms'];
+    }
+
+    if (isset($data['lastChecked'])) {
+        $data['last_checked'] = $data['lastChecked'];
+        unset($data['lastChecked']);
+    }
+
+    if (isset($data['last_checked']) && is_string($data['last_checked'])) {
+        try {
+            $data['last_checked'] = new \DateTime($data['last_checked']);
+        } catch (\Exception $e) {
+            return api_error(400, 'Invalid last_checked date format');
+        }
+    }
+
+    // Increment check count
+    $existing = EnhancedDnsLookup::where('domain', $data['domain'])
+                                  ->where('dns_server', $data['dns_server'])
+                                  ->first();
+    if ($existing) {
+        $data['check_count'] = ($existing->check_count ?? 0) + 1;
+    } else {
+        $data['check_count'] = 1;
+    }
+
+    // Set check_failed based on error_message presence
+    if (isset($data['error_message']) && ! empty($data['error_message'])) {
+        $data['check_failed'] = 1;
+    } else {
+        $data['check_failed'] = 0;
+    }
+
+    // Only allow fillable fields
+    $fillable = [
+        'domain',
+        'dns_server',
+        'resolved_ip',
+        'resolve_time_ms',
+        'device_id',
+        'last_checked',
+        'check_count',
+        'error_message',
+        'check_failed',
+        'enabled',
+    ];
+
+    $updateData = Arr::only($data, $fillable);
+
+    // Upsert: update if exists, insert if not
+    $dnsLookup = EnhancedDnsLookup::updateOrCreate(
+        [
+            'domain' => $data['domain'],
+            'dns_server' => $data['dns_server'],
+        ],
+        $updateData
+    );
+
+    $message = $existing ? "DNS lookup for '{$data['domain']}' with DNS server '{$data['dns_server']}' updated successfully" : "DNS lookup for '{$data['domain']}' with DNS server '{$data['dns_server']}' added successfully";
+
+    return api_success([$dnsLookup->toArray()], 'dns_lookups', $message, 200);
+}
+
+function update_dns_lookup(Illuminate\Http\Request $request)
+{
+    // Update an existing DNS lookup record
+    $domain = $request->route('domain');
+    $dns_server = $request->route('dns_server');
+    $data = $request->json()->all();
+
+    if (empty($domain)) {
+        return api_error(400, 'Domain is required');
+    }
+
+    if (empty($dns_server)) {
+        return api_error(400, 'DNS server is required');
+    }
+
+    if (empty($data)) {
+        return api_error(400, 'No data provided for update');
+    }
+
+    $dnsLookup = EnhancedDnsLookup::where('domain', $domain)
+                                  ->where('dns_server', $dns_server)
+                                  ->first();
+
+    if (! $dnsLookup) {
+        return api_error(404, "DNS lookup for domain '$domain' and DNS server '$dns_server' not found");
+    }
+
+    // Handle resolve_time_ms conversion
+    if (isset($data['resolve_time_ms'])) {
+        $data['resolve_time_ms'] = (float) $data['resolve_time_ms'];
+    }
+
+    if (isset($data['lastChecked'])) {
+        $data['last_checked'] = $data['lastChecked'];
+        unset($data['lastChecked']);
+    }
+
+    if (isset($data['last_checked']) && is_string($data['last_checked'])) {
+        try {
+            $data['last_checked'] = new \DateTime($data['last_checked']);
+        } catch (\Exception $e) {
+            return api_error(400, 'Invalid last_checked date format');
+        }
+    }
+
+    // Set check_failed based on error_message presence
+    if (isset($data['error_message']) && ! empty($data['error_message'])) {
+        $data['check_failed'] = 1;
+    } elseif (isset($data['error_message']) && empty($data['error_message'])) {
+        $data['check_failed'] = 0;
+    }
+
+    // Only allow fillable fields (excluding domain and dns_server which are part of the key)
+    $fillable = [
+        'resolved_ip',
+        'resolve_time_ms',
+        'device_id',
+        'last_checked',
+        'error_message',
+        'check_failed',
+        'enabled',
+    ];
+
+    $updateData = Arr::only($data, $fillable);
+    $dnsLookup->update($updateData);
+
+    return api_success([$dnsLookup->fresh()->toArray()], 'dns_lookups', "DNS lookup for '$domain' with DNS server '$dns_server' updated successfully");
+}
+
+function delete_dns_lookup(Illuminate\Http\Request $request)
+{
+    // Delete a DNS lookup record
+    $domain = $request->route('domain');
+    $dns_server = $request->route('dns_server');
+
+    if (empty($domain)) {
+        return api_error(400, 'Domain is required');
+    }
+
+    if (empty($dns_server)) {
+        return api_error(400, 'DNS server is required');
+    }
+
+    $dnsLookup = EnhancedDnsLookup::where('domain', $domain)
+                                  ->where('dns_server', $dns_server)
+                                  ->first();
+
+    if (! $dnsLookup) {
+        return api_error(404, "DNS lookup for domain '$domain' and DNS server '$dns_server' not found");
+    }
+
+    $domainName = $dnsLookup->domain;
+    $dnsServerName = $dnsLookup->dns_server;
+    $dnsLookup->delete();
+
+    return api_success_noresult(200, "DNS lookup for '$domainName' with DNS server '$dnsServerName' deleted successfully");
 }

@@ -197,6 +197,15 @@ Route::prefix('v0')->group(function (): void {
         Route::delete('{domain}', [App\Api\Controllers\LegacyApiController::class, 'delete_ssl_verification'])->name('delete_ssl_verification');
     });
 
+    // Enhanced DNS Lookup endpoints
+    Route::prefix('enhanced/dns_lookup')->group(function (): void {
+        Route::get('', [App\Api\Controllers\LegacyApiController::class, 'list_dns_lookups'])->name('list_dns_lookups');
+        Route::get('{domain}/{dns_server}', [App\Api\Controllers\LegacyApiController::class, 'get_dns_lookup'])->name('get_dns_lookup');
+        Route::post('', [App\Api\Controllers\LegacyApiController::class, 'add_dns_lookup'])->name('add_dns_lookup');
+        Route::put('{domain}/{dns_server}', [App\Api\Controllers\LegacyApiController::class, 'update_dns_lookup'])->name('update_dns_lookup');
+        Route::delete('{domain}/{dns_server}', [App\Api\Controllers\LegacyApiController::class, 'delete_dns_lookup'])->name('delete_dns_lookup');
+    });
+
     // Route not found
     Route::any('/{path?}', [App\Api\Controllers\LegacyApiController::class, 'api_not_found'])->where('path', '.*');
 });
