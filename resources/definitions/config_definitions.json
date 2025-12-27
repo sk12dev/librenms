@@ -5988,6 +5988,13 @@
             "default": true,
             "type": "boolean"
         },
+        "poller_modules.ssl-verification": {
+            "order": 500,
+            "group": "poller",
+            "section": "poller_modules",
+            "default": false,
+            "type": "boolean"
+        },
         "poller_modules.netstats": {
             "order": 300,
             "group": "poller",

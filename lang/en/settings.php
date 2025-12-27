@@ -1760,6 +1760,9 @@ return [
             'availability' => [
                 'description' => 'Availability',
             ],
+            'ssl-verification' => [
+                'description' => 'SSL Certificate Verification',
+            ],
             'entity-physical' => [
                 'description' => 'Entity Physical',
             ],
