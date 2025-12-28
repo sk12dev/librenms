@@ -2,8 +2,13 @@
 """
 DNS Resolution Checker
 Checks DNS resolution times for domains using specified DNS servers and stores results via LibreNMS API.
-version 2.0.0
+version 3.0.0
 Andy Hobbs - 12/20/2025
+
+Changes in v3.0.0:
+- Now fetches DNS servers and domains from LibreNMS database via API
+- No longer requires dns_servers.txt or config.txt files
+- Configuration is managed through the LibreNMS web interface at /enhanced-config
 """
 
 try:
@@ -31,58 +36,98 @@ except ImportError:
     sys.exit(1)
 
 
-def read_dns_servers(config_file: str = 'dns_servers.txt') -> List[str]:
-    """Read DNS server IPs from config file."""
-    servers = []
-    try:
-        with open(config_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):  # Skip empty lines and comments
-                    servers.append(line)
-    except FileNotFoundError:
-        print(f"Warning: DNS servers config file '{config_file}' not found. Creating empty config file.")
-        with open(config_file, 'w', encoding='utf-8') as f:
-            f.write("# Add one DNS server IP address per line\n")
-            f.write("# Examples:\n")
-            f.write("# 8.8.8.8\n")
-            f.write("# 1.1.1.1\n")
-            f.write("# 208.67.222.222\n")
-    except Exception as e:
-        print(f"Error reading DNS servers config file: {e}")
+def fetch_dns_servers_from_api(api_url: str, api_token: str) -> List[str]:
+    """
+    Fetch enabled DNS servers from LibreNMS API.
     
-    return servers
+    Returns list of DNS server IP addresses.
+    """
+    endpoint = urljoin(api_url, '/api/v0/enhanced/dns_servers')
+    headers = {
+        'X-Auth-Token': api_token,
+        'Content-Type': 'application/json'
+    }
+    params = {
+        'enabled': 1,
+        'order': 'priority',
+        'order_dir': 'asc'
+    }
+    
+    try:
+        response = requests.get(endpoint, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if data.get('status') != 'ok':
+            raise ValueError(f"API returned error status: {data.get('message', 'Unknown error')}")
+        
+        dns_servers = data.get('dns_servers', [])
+        
+        # Extract DNS server IPs
+        servers = [server.get('dns_server') for server in dns_servers if server.get('dns_server')]
+        
+        return servers
+        
+    except requests.exceptions.Timeout:
+        raise Exception(f"API request timed out after 30 seconds")
+    except requests.exceptions.ConnectionError as e:
+        raise Exception(f"Failed to connect to API at {api_url}: {str(e)}")
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 401 or e.response.status_code == 403:
+            raise Exception(f"Authentication failed. Check your API token.")
+        raise Exception(f"API request failed with status {e.response.status_code}: {str(e)}")
+    except json.JSONDecodeError:
+        raise Exception(f"Invalid JSON response from API")
+    except Exception as e:
+        raise Exception(f"Error fetching DNS servers from API: {str(e)}")
 
 
-def read_domains(config_file: str = 'config.txt') -> List[str]:
-    """Read website URLs/domains from config file."""
-    domains = []
-    try:
-        with open(config_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):  # Skip empty lines and comments
-                    # Extract domain from URL if needed
-                    domain = line
-                    if '://' in domain:
-                        domain = domain.split('://')[1]
-                    if '/' in domain:
-                        domain = domain.split('/')[0]
-                    if ':' in domain:
-                        domain = domain.split(':')[0]
-                    domains.append(domain)
-    except FileNotFoundError:
-        print(f"Warning: Config file '{config_file}' not found. Creating example config file.")
-        with open(config_file, 'w', encoding='utf-8') as f:
-            f.write("# Add one domain or URL per line\n")
-            f.write("# Examples:\n")
-            f.write("# google.com\n")
-            f.write("# https://www.example.com\n")
-            f.write("# github.com\n")
-    except Exception as e:
-        print(f"Error reading config file: {e}")
+def fetch_domains_from_api(api_url: str, api_token: str) -> List[str]:
+    """
+    Fetch enabled domains from LibreNMS API.
     
-    return domains
+    Returns list of domain names.
+    """
+    endpoint = urljoin(api_url, '/api/v0/enhanced/dns_domains')
+    headers = {
+        'X-Auth-Token': api_token,
+        'Content-Type': 'application/json'
+    }
+    params = {
+        'enabled': 1,
+        'order': 'domain',
+        'order_dir': 'asc'
+    }
+    
+    try:
+        response = requests.get(endpoint, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if data.get('status') != 'ok':
+            raise ValueError(f"API returned error status: {data.get('message', 'Unknown error')}")
+        
+        dns_domains = data.get('dns_domains', [])
+        
+        # Extract domain names
+        domains = [domain.get('domain') for domain in dns_domains if domain.get('domain')]
+        
+        return domains
+        
+    except requests.exceptions.Timeout:
+        raise Exception(f"API request timed out after 30 seconds")
+    except requests.exceptions.ConnectionError as e:
+        raise Exception(f"Failed to connect to API at {api_url}: {str(e)}")
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 401 or e.response.status_code == 403:
+            raise Exception(f"Authentication failed. Check your API token.")
+        raise Exception(f"API request failed with status {e.response.status_code}: {str(e)}")
+    except json.JSONDecodeError:
+        raise Exception(f"Invalid JSON response from API")
+    except Exception as e:
+        raise Exception(f"Error fetching domains from API: {str(e)}")
 
 
 def resolve_dns(domain: str, dns_server: str, timeout: int = 5) -> Dict[str, Any]:
@@ -270,8 +315,6 @@ def update_dns_lookup_via_api(api_url: str, api_token: str, domain: str, dns_ser
 def main():
     """Main function to orchestrate DNS resolution checking via LibreNMS API."""
     config_file = 'api_config.ini'
-    dns_servers_file = 'dns_servers.txt'
-    domains_file = 'config.txt'
     
     # Load API configuration
     print(f"Loading API configuration from '{config_file}'...")
@@ -279,18 +322,28 @@ def main():
     api_url = api_config['url']
     api_token = api_config['token']
     
-    # Read DNS servers from config file
-    dns_servers = read_dns_servers(dns_servers_file)
+    # Fetch DNS servers from API
+    print(f"Fetching enabled DNS servers from LibreNMS API...")
+    try:
+        dns_servers = fetch_dns_servers_from_api(api_url, api_token)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
     
     if not dns_servers:
-        print("No DNS servers found in config file. Please add DNS server IPs to check.")
+        print("No enabled DNS servers found in LibreNMS. Please add DNS servers via the web interface or API.")
         return
     
-    # Read domains from config file
-    domains = read_domains(domains_file)
+    # Fetch domains from API
+    print(f"Fetching enabled domains from LibreNMS API...")
+    try:
+        domains = fetch_domains_from_api(api_url, api_token)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
     
     if not domains:
-        print("No domains found in config file. Please add domains to check.")
+        print("No enabled domains found in LibreNMS. Please add domains via the web interface or API.")
         return
     
     # Check DNS resolution for each domain against each DNS server

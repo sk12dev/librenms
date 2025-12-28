@@ -200,6 +200,15 @@ Route::middleware(['auth'])->group(function (): void {
         Route::post('plugin/settings/{plugin:plugin_name}', [PluginSettingsController::class, 'update'])->name('plugin.update');
 
         Route::resource('port-groups', PortGroupController::class);
+        
+        // Enhanced Configuration Management
+        Route::get('enhanced-config', [App\Http\Controllers\EnhancedConfigController::class, 'index'])->name('enhanced-config.index');
+        Route::post('enhanced-config/dns-servers', [App\Http\Controllers\EnhancedConfigController::class, 'storeDnsServer'])->name('enhanced-config.dns-server.store');
+        Route::put('enhanced-config/dns-servers/{dnsServer}', [App\Http\Controllers\EnhancedConfigController::class, 'updateDnsServer'])->name('enhanced-config.dns-server.update');
+        Route::delete('enhanced-config/dns-servers/{dnsServer}', [App\Http\Controllers\EnhancedConfigController::class, 'destroyDnsServer'])->name('enhanced-config.dns-server.destroy');
+        Route::post('enhanced-config/dns-domains', [App\Http\Controllers\EnhancedConfigController::class, 'storeDnsDomain'])->name('enhanced-config.dns-domain.store');
+        Route::put('enhanced-config/dns-domains/{dnsDomain}', [App\Http\Controllers\EnhancedConfigController::class, 'updateDnsDomain'])->name('enhanced-config.dns-domain.update');
+        Route::delete('enhanced-config/dns-domains/{dnsDomain}', [App\Http\Controllers\EnhancedConfigController::class, 'destroyDnsDomain'])->name('enhanced-config.dns-domain.destroy');
         Route::get('validate', [ValidateController::class, 'index'])->name('validate');
         Route::get('validate/results/{group?}', [ValidateController::class, 'runValidation'])->name('validate.results');
         Route::post('validate/fix', [ValidateController::class, 'runFixer'])->name('validate.fix');

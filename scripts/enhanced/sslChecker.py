@@ -2,8 +2,11 @@
 """
 SSL Certificate Checker
 Checks SSL certificate validity for websites and stores results via LibreNMS API.
-version 2.0.0
+version 2.1.0
 Andy Hobbs - 12/20/2025
+
+Note: This script already fetches domains from the LibreNMS database via API.
+Configuration is managed through the LibreNMS web interface at /enhanced-config
 """
 
 import ssl

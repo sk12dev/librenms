@@ -206,6 +206,24 @@ Route::prefix('v0')->group(function (): void {
         Route::delete('{domain}/{dns_server}', [App\Api\Controllers\LegacyApiController::class, 'delete_dns_lookup'])->name('delete_dns_lookup');
     });
 
+    // Enhanced DNS Servers Configuration endpoints
+    Route::prefix('enhanced/dns_servers')->group(function (): void {
+        Route::get('', [App\Api\Controllers\LegacyApiController::class, 'list_dns_servers'])->name('list_dns_servers');
+        Route::get('{id}', [App\Api\Controllers\LegacyApiController::class, 'get_dns_server'])->name('get_dns_server');
+        Route::post('', [App\Api\Controllers\LegacyApiController::class, 'add_dns_server'])->name('add_dns_server');
+        Route::put('{id}', [App\Api\Controllers\LegacyApiController::class, 'update_dns_server'])->name('update_dns_server');
+        Route::delete('{id}', [App\Api\Controllers\LegacyApiController::class, 'delete_dns_server'])->name('delete_dns_server');
+    });
+
+    // Enhanced DNS Domains Configuration endpoints
+    Route::prefix('enhanced/dns_domains')->group(function (): void {
+        Route::get('', [App\Api\Controllers\LegacyApiController::class, 'list_dns_domains'])->name('list_dns_domains');
+        Route::get('{id}', [App\Api\Controllers\LegacyApiController::class, 'get_dns_domain'])->name('get_dns_domain');
+        Route::post('', [App\Api\Controllers\LegacyApiController::class, 'add_dns_domain'])->name('add_dns_domain');
+        Route::put('{id}', [App\Api\Controllers\LegacyApiController::class, 'update_dns_domain'])->name('update_dns_domain');
+        Route::delete('{id}', [App\Api\Controllers\LegacyApiController::class, 'delete_dns_domain'])->name('delete_dns_domain');
+    });
+
     // Route not found
     Route::any('/{path?}', [App\Api\Controllers\LegacyApiController::class, 'api_not_found'])->where('path', '.*');
 });

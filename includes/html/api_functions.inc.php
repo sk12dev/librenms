@@ -19,7 +19,9 @@ use App\Models\Availability;
 use App\Models\Device;
 use App\Models\DeviceGroup;
 use App\Models\DeviceOutage;
+use App\Models\EnhancedDnsDomain;
 use App\Models\EnhancedDnsLookup;
+use App\Models\EnhancedDnsServer;
 use App\Models\EnhancedSslVerification;
 use App\Models\Eventlog;
 use App\Models\Ipv4Address;
@@ -4131,4 +4133,361 @@ function delete_dns_lookup(Illuminate\Http\Request $request)
     $dnsLookup->delete();
 
     return api_success_noresult(200, "DNS lookup for '$domainName' with DNS server '$dnsServerName' deleted successfully");
+}
+
+// ============================================================================
+// Enhanced DNS Servers Configuration API
+// ============================================================================
+
+function list_dns_servers(Illuminate\Http\Request $request)
+{
+    // List all DNS server configuration records with optional filters
+    $query = EnhancedDnsServer::query();
+
+    // Filter by enabled status
+    if ($request->has('enabled')) {
+        $query->where('enabled', $request->get('enabled') ? 1 : 0);
+    } else {
+        // Default to only enabled if not specified
+        $query->enabled();
+    }
+
+    // Filter by DNS server IP (exact match or partial)
+    if ($request->has('dns_server')) {
+        $dns_server = $request->get('dns_server');
+        if (str_contains($dns_server, '%') || str_contains($dns_server, '*')) {
+            $query->where('dns_server', 'LIKE', str_replace('*', '%', $dns_server));
+        } else {
+            $query->where('dns_server', $dns_server);
+        }
+    }
+
+    // Ordering
+    $order = $request->get('order', 'priority');
+    $orderDir = $request->get('order_dir', 'asc');
+    if (in_array(strtolower($orderDir), ['asc', 'desc'])) {
+        $query->orderBy($order, $orderDir);
+    } else {
+        // Default ordering by priority, then by DNS server
+        $query->ordered();
+    }
+
+    $results = $query->get()->toArray();
+
+    return api_success($results, 'dns_servers');
+}
+
+function get_dns_server(Illuminate\Http\Request $request)
+{
+    // Get a single DNS server configuration record by ID or IP
+    $id = $request->route('id');
+
+    if (empty($id)) {
+        return api_error(400, 'DNS server ID or IP is required');
+    }
+
+    // Try to find by ID first (numeric), then by IP address
+    if (is_numeric($id)) {
+        $dnsServer = EnhancedDnsServer::find($id);
+    } else {
+        $dnsServer = EnhancedDnsServer::where('dns_server', $id)->first();
+    }
+
+    if (! $dnsServer) {
+        return api_error(404, "DNS server '$id' not found");
+    }
+
+    return api_success([$dnsServer->toArray()], 'dns_servers');
+}
+
+function add_dns_server(Illuminate\Http\Request $request)
+{
+    // Add or update a DNS server configuration record (upsert)
+    $data = $request->json()->all();
+
+    if (empty($data)) {
+        return api_error(400, 'No data provided');
+    }
+
+    if (empty($data['dns_server'])) {
+        return api_error(400, 'DNS server IP address is required');
+    }
+
+    // Validate IP address format
+    if (! filter_var($data['dns_server'], FILTER_VALIDATE_IP)) {
+        return api_error(400, 'Invalid IP address format for DNS server');
+    }
+
+    // Only allow fillable fields
+    $fillable = [
+        'dns_server',
+        'description',
+        'enabled',
+        'priority',
+    ];
+
+    $updateData = Arr::only($data, $fillable);
+
+    // Set defaults
+    if (! isset($updateData['enabled'])) {
+        $updateData['enabled'] = 1;
+    }
+    if (! isset($updateData['priority'])) {
+        $updateData['priority'] = 0;
+    }
+
+    // Upsert: update if exists, insert if not
+    $existing = EnhancedDnsServer::where('dns_server', $data['dns_server'])->exists();
+    $dnsServer = EnhancedDnsServer::updateOrCreate(
+        [
+            'dns_server' => $data['dns_server'],
+        ],
+        $updateData
+    );
+
+    $message = $existing ? "DNS server '{$data['dns_server']}' updated successfully" : "DNS server '{$data['dns_server']}' added successfully";
+
+    return api_success([$dnsServer->toArray()], 'dns_servers', $message, 200);
+}
+
+function update_dns_server(Illuminate\Http\Request $request)
+{
+    // Update an existing DNS server configuration record
+    $id = $request->route('id');
+    $data = $request->json()->all();
+
+    if (empty($id)) {
+        return api_error(400, 'DNS server ID or IP is required');
+    }
+
+    // Try to find by ID first (numeric), then by IP address
+    if (is_numeric($id)) {
+        $dnsServer = EnhancedDnsServer::find($id);
+    } else {
+        $dnsServer = EnhancedDnsServer::where('dns_server', $id)->first();
+    }
+
+    if (! $dnsServer) {
+        return api_error(404, "DNS server '$id' not found");
+    }
+
+    // Only allow fillable fields (excluding dns_server which is the key)
+    $fillable = [
+        'description',
+        'enabled',
+        'priority',
+    ];
+
+    $updateData = Arr::only($data, $fillable);
+    $dnsServer->update($updateData);
+
+    return api_success([$dnsServer->fresh()->toArray()], 'dns_servers', "DNS server '$id' updated successfully");
+}
+
+function delete_dns_server(Illuminate\Http\Request $request)
+{
+    // Delete a DNS server configuration record
+    $id = $request->route('id');
+
+    if (empty($id)) {
+        return api_error(400, 'DNS server ID or IP is required');
+    }
+
+    // Try to find by ID first (numeric), then by IP address
+    if (is_numeric($id)) {
+        $dnsServer = EnhancedDnsServer::find($id);
+    } else {
+        $dnsServer = EnhancedDnsServer::where('dns_server', $id)->first();
+    }
+
+    if (! $dnsServer) {
+        return api_error(404, "DNS server '$id' not found");
+    }
+
+    $dnsServerIp = $dnsServer->dns_server;
+    $dnsServer->delete();
+
+    return api_success_noresult(200, "DNS server '$dnsServerIp' deleted successfully");
+}
+
+// ============================================================================
+// Enhanced DNS Domains Configuration API
+// ============================================================================
+
+function list_dns_domains(Illuminate\Http\Request $request)
+{
+    // List all DNS domain configuration records with optional filters
+    $query = EnhancedDnsDomain::query();
+
+    // Filter by enabled status
+    if ($request->has('enabled')) {
+        $query->where('enabled', $request->get('enabled') ? 1 : 0);
+    } else {
+        // Default to only enabled if not specified
+        $query->enabled();
+    }
+
+    // Filter by domain (exact match or partial)
+    if ($request->has('domain')) {
+        $domain = $request->get('domain');
+        if (str_contains($domain, '%') || str_contains($domain, '*')) {
+            $query->where('domain', 'LIKE', str_replace('*', '%', $domain));
+        } else {
+            $query->where('domain', $domain);
+        }
+    }
+
+    // Filter by device_id if provided
+    if ($request->has('device_id')) {
+        $query->where('device_id', $request->get('device_id'));
+    }
+
+    // Ordering
+    $order = $request->get('order', 'domain');
+    $orderDir = $request->get('order_dir', 'asc');
+    if (in_array(strtolower($orderDir), ['asc', 'desc'])) {
+        $query->orderBy($order, $orderDir);
+    }
+
+    $results = $query->get()->toArray();
+
+    return api_success($results, 'dns_domains');
+}
+
+function get_dns_domain(Illuminate\Http\Request $request)
+{
+    // Get a single DNS domain configuration record by ID or domain
+    $id = $request->route('id');
+
+    if (empty($id)) {
+        return api_error(400, 'DNS domain ID or domain name is required');
+    }
+
+    // Try to find by ID first (numeric), then by domain name
+    if (is_numeric($id)) {
+        $dnsDomain = EnhancedDnsDomain::find($id);
+    } else {
+        $dnsDomain = EnhancedDnsDomain::where('domain', $id)->first();
+    }
+
+    if (! $dnsDomain) {
+        return api_error(404, "DNS domain '$id' not found");
+    }
+
+    return api_success([$dnsDomain->toArray()], 'dns_domains');
+}
+
+function add_dns_domain(Illuminate\Http\Request $request)
+{
+    // Add or update a DNS domain configuration record (upsert)
+    $data = $request->json()->all();
+
+    if (empty($data)) {
+        return api_error(400, 'No data provided');
+    }
+
+    if (empty($data['domain'])) {
+        return api_error(400, 'Domain is required');
+    }
+
+    // Clean domain name (remove protocol, path, port if present)
+    $domain = $data['domain'];
+    if (str_contains($domain, '://')) {
+        $domain = parse_url($domain, PHP_URL_HOST) ?: $domain;
+    }
+    if (str_contains($domain, '/')) {
+        $domain = explode('/', $domain)[0];
+    }
+    if (str_contains($domain, ':')) {
+        $domain = explode(':', $domain)[0];
+    }
+    $data['domain'] = $domain;
+
+    // Only allow fillable fields
+    $fillable = [
+        'domain',
+        'description',
+        'device_id',
+        'enabled',
+    ];
+
+    $updateData = Arr::only($data, $fillable);
+
+    // Set defaults
+    if (! isset($updateData['enabled'])) {
+        $updateData['enabled'] = 1;
+    }
+
+    // Upsert: update if exists, insert if not
+    $existing = EnhancedDnsDomain::where('domain', $data['domain'])->exists();
+    $dnsDomain = EnhancedDnsDomain::updateOrCreate(
+        [
+            'domain' => $data['domain'],
+        ],
+        $updateData
+    );
+
+    $message = $existing ? "DNS domain '{$data['domain']}' updated successfully" : "DNS domain '{$data['domain']}' added successfully";
+
+    return api_success([$dnsDomain->toArray()], 'dns_domains', $message, 200);
+}
+
+function update_dns_domain(Illuminate\Http\Request $request)
+{
+    // Update an existing DNS domain configuration record
+    $id = $request->route('id');
+    $data = $request->json()->all();
+
+    if (empty($id)) {
+        return api_error(400, 'DNS domain ID or domain name is required');
+    }
+
+    // Try to find by ID first (numeric), then by domain name
+    if (is_numeric($id)) {
+        $dnsDomain = EnhancedDnsDomain::find($id);
+    } else {
+        $dnsDomain = EnhancedDnsDomain::where('domain', $id)->first();
+    }
+
+    if (! $dnsDomain) {
+        return api_error(404, "DNS domain '$id' not found");
+    }
+
+    // Only allow fillable fields (excluding domain which is the key)
+    $fillable = [
+        'description',
+        'device_id',
+        'enabled',
+    ];
+
+    $updateData = Arr::only($data, $fillable);
+    $dnsDomain->update($updateData);
+
+    return api_success([$dnsDomain->fresh()->toArray()], 'dns_domains', "DNS domain '$id' updated successfully");
+}
+
+function delete_dns_domain(Illuminate\Http\Request $request)
+{
+    // Delete a DNS domain configuration record
+    $id = $request->route('id');
+
+    if (empty($id)) {
+        return api_error(400, 'DNS domain ID or domain name is required');
+    }
+
+    // Try to find by ID first (numeric), then by domain name
+    if (is_numeric($id)) {
+        $dnsDomain = EnhancedDnsDomain::find($id);
+    } else {
+        $dnsDomain = EnhancedDnsDomain::where('domain', $id)->first();
+    }
+
+    if (! $dnsDomain) {
+        return api_error(404, "DNS domain '$id' not found");
+    }
+
+    $domainName = $dnsDomain->domain;
+    $dnsDomain->delete();
+
+    return api_success_noresult(200, "DNS domain '$domainName' deleted successfully");
 }
