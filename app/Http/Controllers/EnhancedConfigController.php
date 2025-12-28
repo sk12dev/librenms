@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Interfaces\ToastInterface;
 use App\Models\EnhancedDnsDomain;
 use App\Models\EnhancedDnsServer;
+use App\Models\EnhancedSslVerification;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -21,6 +22,7 @@ class EnhancedConfigController extends Controller
             return view('enhanced-config.index', [
                 'dns_servers' => EnhancedDnsServer::ordered()->get(),
                 'dns_domains' => EnhancedDnsDomain::enabled()->with('device')->orderBy('domain')->get(),
+                'ssl_verifications' => EnhancedSslVerification::with('device')->orderBy('domain')->get(),
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
             // Handle case where tables don't exist yet
@@ -226,6 +228,127 @@ class EnhancedConfigController extends Controller
         $dnsDomain->delete();
 
         $msg = __('DNS Domain :domain deleted', ['domain' => htmlentities($domainName)]);
+
+        return response($msg, 200);
+    }
+
+    // ============================================================================
+    // SSL Verification Management
+    // ============================================================================
+
+    /**
+     * Store a newly created SSL verification.
+     *
+     * @param  Request  $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function storeSslVerification(Request $request, ToastInterface $toast)
+    {
+        $this->validate($request, [
+            'domain' => 'required|string|max:255|unique:enhanced_ssl_verification,domain',
+            'port' => 'nullable|integer|min:1|max:65535',
+            'description' => 'nullable|string|max:255',
+            'device_id' => 'nullable|integer|exists:devices,device_id',
+            'enabled' => 'boolean',
+            'alert_on_expiring' => 'boolean',
+            'alert_days_before' => 'nullable|integer|min:1',
+        ]);
+
+        // Clean domain name
+        $domain = $request->input('domain');
+        if (str_contains($domain, '://')) {
+            $domain = parse_url($domain, PHP_URL_HOST) ?: $domain;
+        }
+        if (str_contains($domain, '/')) {
+            $domain = explode('/', $domain)[0];
+        }
+        if (str_contains($domain, ':')) {
+            $domain = explode(':', $domain)[0];
+        }
+
+        $sslVerification = EnhancedSslVerification::create([
+            'domain' => $domain,
+            'port' => $request->input('port', 443),
+            'device_id' => $request->input('device_id'),
+            'enabled' => $request->input('enabled', true),
+            'alert_on_expiring' => $request->input('alert_on_expiring', true),
+            'alert_days_before' => $request->input('alert_days_before', 30),
+        ]);
+
+        $toast->success(__('SSL Verification for :domain added successfully', ['domain' => $sslVerification->domain]));
+
+        return redirect()->route('enhanced-config.index');
+    }
+
+    /**
+     * Update the specified SSL verification.
+     *
+     * @param  Request  $request
+     * @param  EnhancedSslVerification  $sslVerification
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function updateSslVerification(Request $request, EnhancedSslVerification $sslVerification, ToastInterface $toast)
+    {
+        $this->validate($request, [
+            'domain' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('enhanced_ssl_verification', 'domain')->where(function ($query) use ($sslVerification): void {
+                    $query->where('ssl_verification_id', '!=', $sslVerification->ssl_verification_id);
+                }),
+            ],
+            'port' => 'nullable|integer|min:1|max:65535',
+            'device_id' => 'nullable|integer|exists:devices,device_id',
+            'enabled' => 'boolean',
+            'alert_on_expiring' => 'boolean',
+            'alert_days_before' => 'nullable|integer|min:1',
+        ]);
+
+        // Clean domain name
+        $domain = $request->input('domain');
+        if (str_contains($domain, '://')) {
+            $domain = parse_url($domain, PHP_URL_HOST) ?: $domain;
+        }
+        if (str_contains($domain, '/')) {
+            $domain = explode('/', $domain)[0];
+        }
+        if (str_contains($domain, ':')) {
+            $domain = explode(':', $domain)[0];
+        }
+
+        $sslVerification->fill([
+            'domain' => $domain,
+            'port' => $request->input('port', 443),
+            'device_id' => $request->input('device_id'),
+            'enabled' => $request->input('enabled', true),
+            'alert_on_expiring' => $request->input('alert_on_expiring', true),
+            'alert_days_before' => $request->input('alert_days_before', 30),
+        ]);
+
+        if ($sslVerification->save()) {
+            $toast->success(__('SSL Verification for :domain updated successfully', ['domain' => $sslVerification->domain]));
+        } else {
+            $toast->error(__('Failed to save'));
+
+            return redirect()->back()->withInput();
+        }
+
+        return redirect()->route('enhanced-config.index');
+    }
+
+    /**
+     * Remove the specified SSL verification.
+     *
+     * @param  EnhancedSslVerification  $sslVerification
+     * @return \Illuminate\Http\Response
+     */
+    public function destroySslVerification(EnhancedSslVerification $sslVerification)
+    {
+        $domainName = $sslVerification->domain;
+        $sslVerification->delete();
+
+        $msg = __('SSL Verification for :domain deleted', ['domain' => htmlentities($domainName)]);
 
         return response($msg, 200);
     }

@@ -209,6 +209,9 @@ Route::middleware(['auth'])->group(function (): void {
         Route::post('enhanced-config/dns-domains', [App\Http\Controllers\EnhancedConfigController::class, 'storeDnsDomain'])->name('enhanced-config.dns-domain.store');
         Route::put('enhanced-config/dns-domains/{dnsDomain}', [App\Http\Controllers\EnhancedConfigController::class, 'updateDnsDomain'])->name('enhanced-config.dns-domain.update');
         Route::delete('enhanced-config/dns-domains/{dnsDomain}', [App\Http\Controllers\EnhancedConfigController::class, 'destroyDnsDomain'])->name('enhanced-config.dns-domain.destroy');
+        Route::post('enhanced-config/ssl-verifications', [App\Http\Controllers\EnhancedConfigController::class, 'storeSslVerification'])->name('enhanced-config.ssl-verification.store');
+        Route::put('enhanced-config/ssl-verifications/{sslVerification}', [App\Http\Controllers\EnhancedConfigController::class, 'updateSslVerification'])->name('enhanced-config.ssl-verification.update');
+        Route::delete('enhanced-config/ssl-verifications/{sslVerification}', [App\Http\Controllers\EnhancedConfigController::class, 'destroySslVerification'])->name('enhanced-config.ssl-verification.destroy');
         Route::get('validate', [ValidateController::class, 'index'])->name('validate');
         Route::get('validate/results/{group?}', [ValidateController::class, 'runValidation'])->name('validate.results');
         Route::post('validate/fix', [ValidateController::class, 'runFixer'])->name('validate.fix');
