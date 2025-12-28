@@ -240,7 +240,7 @@
             modal.find('#dnsServerPriority').val(button.data('priority') || 0);
             modal.find('#dnsServerEnabled').prop('checked', button.data('enabled') == 1);
         } else {
-            modal.find('#dnsServerModalTitle').text('{{ __('Add DNS Server") }}');
+            modal.find('#dnsServerModalTitle').text('{{ __('Add DNS Server') }}');
             modal.find('#dnsServerForm').attr('action', '{{ route("enhanced-config.dns-server.store") }}');
             modal.find('#dnsServerForm input[name="_method"]').remove();
             modal.find('#dnsServerForm')[0].reset();
@@ -256,7 +256,7 @@
         var modal = $(this);
         
         if (action === 'edit') {
-            modal.find('#dnsDomainModalTitle').text('{{ __('Edit DNS Domain") }}');
+            modal.find('#dnsDomainModalTitle').text('{{ __('Edit DNS Domain') }}');
             modal.find('#dnsDomainForm').attr('action', '{{ route("enhanced-config.dns-domain.update", ["dnsDomain" => ":id"]) }}'.replace(':id', button.data('id')));
             modal.find('#dnsDomainForm').append('<input type="hidden" name="_method" value="PUT">');
             modal.find('#dnsDomainId').val(button.data('id'));
@@ -265,7 +265,7 @@
             modal.find('#dnsDomainDeviceId').val(button.data('device-id') || '');
             modal.find('#dnsDomainEnabled').prop('checked', button.data('enabled') == 1);
         } else {
-            modal.find('#dnsDomainModalTitle').text('{{ __('Add DNS Domain") }}');
+            modal.find('#dnsDomainModalTitle').text('{{ __('Add DNS Domain') }}');
             modal.find('#dnsDomainForm').attr('action', '{{ route("enhanced-config.dns-domain.store") }}');
             modal.find('#dnsDomainForm input[name="_method"]').remove();
             modal.find('#dnsDomainForm')[0].reset();
@@ -275,7 +275,7 @@
     });
 
     function deleteDnsServer(id, server) {
-        if (confirm('{{ __('Are you sure you want to delete DNS server") }}: ' + server + '?')) {
+        if (confirm('{{ __('Are you sure you want to delete DNS server') }}: ' + server + '?')) {
             $.ajax({
                 url: '{{ route("enhanced-config.dns-server.destroy", ["dnsServer" => ":id"]) }}'.replace(':id', id),
                 type: 'DELETE',
@@ -286,14 +286,14 @@
                     location.reload();
                 },
                 error: function() {
-                    alert('{{ __('Error deleting DNS server") }}');
+                    alert('{{ __('Error deleting DNS server') }}');
                 }
             });
         }
     }
 
     function deleteDnsDomain(id, domain) {
-        if (confirm('{{ __('Are you sure you want to delete DNS domain") }}: ' + domain + '?')) {
+        if (confirm('{{ __('Are you sure you want to delete DNS domain') }}: ' + domain + '?')) {
             $.ajax({
                 url: '{{ route("enhanced-config.dns-domain.destroy", ["dnsDomain" => ":id"]) }}'.replace(':id', id),
                 type: 'DELETE',
@@ -304,7 +304,7 @@
                     location.reload();
                 },
                 error: function() {
-                    alert('{{ __('Error deleting DNS domain") }}');
+                    alert('{{ __('Error deleting DNS domain') }}');
                 }
             });
         }

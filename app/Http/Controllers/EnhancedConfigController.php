@@ -17,10 +17,18 @@ class EnhancedConfigController extends Controller
      */
     public function index()
     {
-        return view('enhanced-config.index', [
-            'dns_servers' => EnhancedDnsServer::ordered()->get(),
-            'dns_domains' => EnhancedDnsDomain::enabled()->orderBy('domain')->get(),
-        ]);
+        try {
+            return view('enhanced-config.index', [
+                'dns_servers' => EnhancedDnsServer::ordered()->get(),
+                'dns_domains' => EnhancedDnsDomain::enabled()->with('device')->orderBy('domain')->get(),
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle case where tables don't exist yet
+            if (str_contains($e->getMessage(), "doesn't exist")) {
+                abort(500, 'Database tables not found. Please run migrations: php artisan migrate');
+            }
+            throw $e;
+        }
     }
 
     // ============================================================================
