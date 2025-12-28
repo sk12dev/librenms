@@ -623,6 +623,8 @@
                         </li>
                         <li><a href="{{ url('authlog') }}"><i class="fa fa-shield fa-fw fa-lg"
                                                               aria-hidden="true"></i> {{ __('Auth History') }}</a></li>
+                        <li><a href="{{ route('enhanced-config.index') }}"><i class="fa fa-cog fa-fw fa-lg"
+                                                              aria-hidden="true"></i> {{ __('Enhanced Configuration') }}</a></li>
                         <li role="presentation" class="divider"></li>
                         <li class="dropdown-submenu">
                             <a href="{{ route('poller.index') }}"><i class="fa fa-th-large fa-fw fa-lg" aria-hidden="true"></i> {{ __('Poller') }}</a>
