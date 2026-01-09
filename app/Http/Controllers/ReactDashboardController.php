@@ -29,6 +29,17 @@ class ReactDashboardController extends Controller
             ->first()
             ?->token_hash ?? null;
         
+        // If no API token exists, create one automatically
+        if (!$apiToken) {
+            try {
+                $newToken = \App\Models\ApiToken::generateToken($user, 'React Dashboard Auto-generated');
+                $apiToken = $newToken->token_hash;
+                \Log::info('React Dashboard: Auto-generated API token for user ' . $user->username);
+            } catch (\Exception $e) {
+                \Log::error('React Dashboard: Failed to generate API token: ' . $e->getMessage());
+            }
+        }
+        
         // Read the built index.html to extract asset paths
         $indexHtmlPath = public_path('react-dashboard/index.html');
         $jsFile = null;
@@ -56,13 +67,21 @@ class ReactDashboardController extends Controller
             }
         }
         
+        // If no API token, provide helpful message
+        if (!$apiToken) {
+            \Log::warning('React Dashboard: User ' . $user->username . ' does not have an API token');
+        }
+        
+        // Get base URL for API calls (without /api/v0, the React app will add that)
+        $baseUrl = url('/');
+        
         return view('react-dashboard.index', [
             'pagetitle' => 'React Dashboard',
             'show_menu' => true,
             // Pass any initial data your React app needs
             'apiToken' => $apiToken,
-            'apiUrl' => url('/api/v0'),
-            'baseUrl' => url('/'),
+            'apiUrl' => $baseUrl, // Base URL, React will append /api/v0
+            'baseUrl' => $baseUrl,
             'jsFile' => $jsFile,
             'cssFile' => $cssFile,
         ]);

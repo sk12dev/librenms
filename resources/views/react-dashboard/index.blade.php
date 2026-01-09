@@ -16,7 +16,7 @@
 @endsection
 
 @section('scripts')
-    {{-- Pass configuration to React app --}}
+    {{-- Pass configuration to React app - MUST be loaded before the module script --}}
     <script>
         window.ReactDashboardConfig = {
             apiToken: @json($apiToken),
@@ -24,6 +24,11 @@
             baseUrl: @json($baseUrl),
             csrfToken: @json(csrf_token()),
         };
+        console.log('[Blade Template] ReactDashboardConfig set:', {
+            apiUrl: window.ReactDashboardConfig.apiUrl,
+            apiToken: window.ReactDashboardConfig.apiToken ? window.ReactDashboardConfig.apiToken.substring(0, 8) + '...' : 'NOT SET',
+            baseUrl: window.ReactDashboardConfig.baseUrl,
+        });
     </script>
     
     {{-- Load React dashboard assets --}}
