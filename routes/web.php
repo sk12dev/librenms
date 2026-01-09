@@ -49,6 +49,7 @@ use App\Http\Controllers\ValidateController;
 use App\Http\Controllers\Widgets;
 use App\Http\Controllers\WidgetSettingsController;
 use App\Http\Controllers\WirelessSensorController;
+use App\Http\Controllers\ReactDashboardController;
 use App\Http\Middleware\AuthenticateGraph;
 use Illuminate\Support\Facades\Auth as AuthFacade;
 use Illuminate\Support\Facades\Route;
@@ -111,6 +112,9 @@ Route::middleware(['auth'])->group(function (): void {
     Route::get('overview', [OverviewController::class, 'index'])->name('overview');
     Route::get('/', [OverviewController::class, 'index'])->name('home');
     Route::view('vminfo', 'vminfo');
+    
+    // React Dashboard
+    Route::get('react-dashboard', [ReactDashboardController::class, 'index'])->name('react-dashboard');
 
     Route::get('nac', [NacController::class, 'index']);
 
