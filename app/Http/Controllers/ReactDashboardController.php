@@ -40,30 +40,45 @@ class ReactDashboardController extends Controller
             }
         }
         
-        // Read the built index.html to extract asset paths
-        $indexHtmlPath = public_path('react-dashboard/index.html');
+        // Get asset paths - check for Vite manifest first, then fallback to known paths
+        $manifestPath = public_path('react-dashboard/.vite/manifest.json');
         $jsFile = null;
         $cssFile = null;
         
-        if (file_exists($indexHtmlPath)) {
-            $htmlContent = file_get_contents($indexHtmlPath);
-            
-            // Extract JS file path
-            if (preg_match('/src=["\']([^"\']*\.js)["\']/', $htmlContent, $jsMatches)) {
-                $jsFile = $jsMatches[1];
-                // Convert absolute paths to relative paths
-                // If it starts with /assets/, change to assets/ (relative to react-dashboard/)
-                $jsFile = preg_replace('#^/assets/#', 'assets/', $jsFile);
-                // If it starts with /react-dashboard/assets/, remove the leading /react-dashboard
-                $jsFile = preg_replace('#^/react-dashboard/#', '', $jsFile);
+        if (file_exists($manifestPath)) {
+            // Read Vite manifest to get actual asset filenames (with hashes)
+            $manifest = json_decode(file_get_contents($manifestPath), true);
+            if ($manifest && isset($manifest['index.html'])) {
+                $indexEntry = $manifest['index.html'];
+                if (isset($indexEntry['file'])) {
+                    $jsFile = $indexEntry['file'];
+                }
+                if (isset($indexEntry['css']) && is_array($indexEntry['css']) && !empty($indexEntry['css'])) {
+                    $cssFile = $indexEntry['css'][0];
+                }
             }
-            
-            // Extract CSS file path
-            if (preg_match('/href=["\']([^"\']*\.css)["\']/', $htmlContent, $cssMatches)) {
-                $cssFile = $cssMatches[1];
-                // Convert absolute paths to relative paths
-                $cssFile = preg_replace('#^/assets/#', 'assets/', $cssFile);
-                $cssFile = preg_replace('#^/react-dashboard/#', '', $cssFile);
+        }
+        
+        // Fallback to known paths if manifest doesn't exist
+        if (!$jsFile) {
+            // Look for any JS file in assets directory
+            $assetsDir = public_path('react-dashboard/assets');
+            if (is_dir($assetsDir)) {
+                $jsFiles = glob($assetsDir . '/index*.js');
+                if (!empty($jsFiles)) {
+                    $jsFile = 'assets/' . basename($jsFiles[0]);
+                }
+            }
+        }
+        
+        if (!$cssFile) {
+            // Look for any CSS file in assets directory
+            $assetsDir = public_path('react-dashboard/assets');
+            if (is_dir($assetsDir)) {
+                $cssFiles = glob($assetsDir . '/index*.css');
+                if (!empty($cssFiles)) {
+                    $cssFile = 'assets/' . basename($cssFiles[0]);
+                }
             }
         }
         

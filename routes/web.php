@@ -115,6 +115,7 @@ Route::middleware(['auth'])->group(function (): void {
     
     // React Dashboard
     Route::get('react-dashboard', [ReactDashboardController::class, 'index'])->name('react-dashboard');
+    Route::get('react-dashboard/', [ReactDashboardController::class, 'index']); // Handle trailing slash
 
     Route::get('nac', [NacController::class, 'index']);
 
