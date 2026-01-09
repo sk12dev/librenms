@@ -81,6 +81,10 @@ Route::get('graph/{path?}', GraphController::class)
 
 // WebUI
 Route::middleware(['auth'])->group(function (): void {
+    // React Dashboard - placed early to ensure it's matched before catch-all routes
+    Route::get('react-dashboard', [ReactDashboardController::class, 'index'])->name('react-dashboard');
+    Route::get('react-dashboard/', [ReactDashboardController::class, 'index']); // Handle trailing slash
+    
     // pages
     Route::post('alert/{alert}/ack', [AlertController::class, 'ack'])->name('alert.ack');
     Route::resource('device-groups', DeviceGroupController::class);
@@ -112,10 +116,6 @@ Route::middleware(['auth'])->group(function (): void {
     Route::get('overview', [OverviewController::class, 'index'])->name('overview');
     Route::get('/', [OverviewController::class, 'index'])->name('home');
     Route::view('vminfo', 'vminfo');
-    
-    // React Dashboard
-    Route::get('react-dashboard', [ReactDashboardController::class, 'index'])->name('react-dashboard');
-    Route::get('react-dashboard/', [ReactDashboardController::class, 'index']); // Handle trailing slash
 
     Route::get('nac', [NacController::class, 'index']);
 
