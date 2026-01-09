@@ -75,6 +75,15 @@ class ReactDashboardController extends Controller
         // Get base URL for API calls (without /api/v0, the React app will add that)
         $baseUrl = url('/');
         
+        // Debug logging
+        \Log::info('React Dashboard Config:', [
+            'apiToken' => $apiToken ? substr($apiToken, 0, 8) . '...' : 'NULL',
+            'apiUrl' => $baseUrl,
+            'baseUrl' => $baseUrl,
+            'jsFile' => $jsFile,
+            'cssFile' => $cssFile,
+        ]);
+        
         return view('react-dashboard.index', [
             'pagetitle' => 'React Dashboard',
             'show_menu' => true,
