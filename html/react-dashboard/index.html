@@ -2,13 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/react-dashboard/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>vite-project</title>
-    <script type="module" crossorigin src="/react-dashboard/assets/index.js"></script>
-    <link rel="stylesheet" crossorigin href="/react-dashboard/assets/index.css">
+    <title>React Dashboard - Redirecting...</title>
+    <script>
+      // This static file should not be accessed directly.
+      // Redirect to the Laravel route which will inject the configuration.
+      if (window.location.pathname.includes('/index.html')) {
+        window.location.replace(window.location.pathname.replace('/index.html', ''));
+      } else {
+        // If somehow accessed without index.html, still redirect
+        window.location.replace('/react-dashboard');
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <p>Redirecting to the correct dashboard URL...</p>
+    <p>If you are not redirected, please go to: <a href="/react-dashboard">/react-dashboard</a></p>
   </body>
 </html>
