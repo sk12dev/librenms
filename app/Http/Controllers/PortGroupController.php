@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Interfaces\ToastInterface;
+use App\Models\Port;
 use App\Models\PortGroup;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -45,7 +47,7 @@ class PortGroupController extends Controller
             'name' => 'required|string|unique:port_groups',
         ]);
 
-        $portGroup = PortGroup::make($request->only(['name', 'desc']));
+        $portGroup = new PortGroup($request->only(['name', 'desc']));
         $portGroup->save();
 
         $toast->success(__('Port Group :name created', ['name' => $portGroup->name]));
@@ -113,5 +115,18 @@ class PortGroupController extends Controller
         $msg = __('Port Group :name deleted', ['name' => htmlentities($portGroup->name)]);
 
         return response($msg, 200);
+    }
+
+    /**
+     * Show graph of all ports in a group
+     */
+    public function graph(Request $request, PortGroup $group): View
+    {
+        $this->authorize('viewAny', Port::class);
+
+        return view('port-group.graph', [
+            'group' => $group,
+            'ports' => Port::hasAccess($request->user())->inPortGroup($group->id)->with('device')->withCount('macAccounting')->get(),
+        ]);
     }
 }

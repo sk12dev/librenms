@@ -26,7 +26,6 @@
 
 namespace App\Http\Controllers;
 
-use App;
 use App\Facades\LibrenmsConfig;
 use App\Models\Application;
 use App\Models\Callback;
@@ -55,6 +54,7 @@ use App\Models\Vrf;
 use App\Models\WirelessSensor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\App;
 use LibreNMS\Data\Store\Rrd;
 use LibreNMS\Util\Http;
 use LibreNMS\Util\Version;
@@ -82,7 +82,7 @@ class AboutController extends Controller
             'version_python' => $version->python(),
             'version_webserver' => $request->server('SERVER_SOFTWARE'),
             'version_rrdtool' => Rrd::version(),
-            'version_netsnmp' => str_replace('version: ', '', rtrim(shell_exec(LibrenmsConfig::get('snmpget', 'snmpget') . ' -V 2>&1'))),
+            'version_netsnmp' => $version->netSnmp(),
 
             'stat_apps' => Application::count(),
             'stat_devices' => Device::count(),

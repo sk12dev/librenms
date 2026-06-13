@@ -32,6 +32,7 @@ use App\Models\Device;
 use App\Models\UserPref;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use LibreNMS\Authentication\LegacyAuth;
 use LibreNMS\Authentication\TwoFactor;
@@ -88,7 +89,7 @@ class UserPreferencesController extends Controller
             $data['twofactor'] = $twofactor;
         }
 
-        if (! $user->hasGlobalRead()) {
+        if (Gate::denies('viewAll', Device::class)) {
             $data['devices'] = Device::hasAccess($user)->get();
         }
 
@@ -131,6 +132,20 @@ class UserPreferencesController extends Controller
         $this->updatePreference($request->pref, $request->value);
 
         return response()->json(['status' => 'success']);
+    }
+
+    public function update(Request $request, string $preference)
+    {
+        $request->validate([
+            'name' => ['required', 'string'],
+            'filters' => ['array'],
+        ]);
+
+        if ($preference == 'filters') {
+            $name = 'filters.' . $request->string('name');
+            $filters = $request->array('filters');
+            $this->updatePreference($name, $filters ? json_encode($filters) : 'default');
+        }
     }
 
     private function getValidLocales()

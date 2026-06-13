@@ -408,6 +408,15 @@ if (LibrenmsConfig::get('enable_ports_poe')) {
                 $port_stats[$if_id] = array_merge($port_stats[$if_id], $p_stats);
             }
         }
+    } elseif ($device['os'] == 'ironware') {
+        $fetched_data_string .= 'snAgentPoePortTable ';
+        $port_stats_poe = SnmpQuery::hideMib()->walk('FOUNDRY-POE-MIB::snAgentPoePortTable')->table(1);
+
+        foreach ($port_stats_poe as $p_index => $p_stats) {
+            if (is_array($port_stats[$p_index])) {
+                $port_stats[$p_index] = array_merge($port_stats[$p_index], $p_stats);
+            }
+        }
     }
 }
 
@@ -577,6 +586,9 @@ foreach ($ports as $port) {
         if ($device['os'] == 'vmware-vcsa' && preg_match('/Device ([a-z0-9]+) at .*/', (string) $this_port['ifDescr'], $matches)) {
             $this_port['ifName'] = $matches[1];
         }
+
+        $this_port['ifName'] = StringHelpers::inferEncoding($this_port['ifName'] ?? null);
+        $this_port['ifDescr'] = StringHelpers::inferEncoding($this_port['ifDescr'] ?? null);
 
         $polled_period = max($polled - $port['poll_time'], 1);
 

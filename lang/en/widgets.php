@@ -10,6 +10,9 @@ return [
     'alertlog-stats' => [
         'title' => 'Alert History Stats',
     ],
+    'alert-map' => [
+        'title' => 'Alert Map',
+    ],
     'availability-map' => [
         'title' => 'Availability Map',
     ],
@@ -45,6 +48,9 @@ return [
     ],
     'graylog' => [
         'title' => 'Graylog',
+    ],
+    'health-sensors' => [
+        'title' => 'Health Sensors',
     ],
     'notes' => [
         'title' => 'Notes',
