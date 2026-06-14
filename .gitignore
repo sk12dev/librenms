@@ -18,6 +18,8 @@ Thumbs.db
 config.php
 html/css/custom/*
 html/images/custom/*
+!html/images/custom/README.md
+!html/images/custom/logo.svg
 html/images/custommap/*
 includes/custom/*
 junk
