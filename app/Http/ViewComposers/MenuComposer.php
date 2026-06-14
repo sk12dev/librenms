@@ -76,7 +76,7 @@ class MenuComposer
         //TODO: should be handled via CSS Themes
         $vars['navbar'] = in_array($site_style, ['mono']) ? 'navbar-inverse' : '';
 
-        $vars['project_name'] = LibrenmsConfig::get('project_name', 'LibreNMS');
+        $vars['project_name'] = LibrenmsConfig::get('project_name', 'Dashboard by STEP');
 
         //Dashboards
         $vars['dashboards'] = Dashboard::select('dashboard_id', 'dashboard_name')->allAvailable($user)->orderBy('dashboard_name')->get();

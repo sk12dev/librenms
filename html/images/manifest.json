@@ -1,6 +1,6 @@
 {
-    "short_name": "LibreNMS",
-    "name": "LibreNMS: Network Monitoring",
+    "short_name": "Dashboard by STEP",
+    "name": "Dashboard by STEP: Network Monitoring",
     "description": "A fully featured network monitoring system that provides a wealth of features and device support",
     "icons": [
         {

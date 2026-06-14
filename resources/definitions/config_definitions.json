@@ -6399,7 +6399,7 @@
             "type": "text"
         },
         "project_name": {
-            "default": "LibreNMS",
+            "default": "Dashboard by STEP",
             "type": "text"
         },
         "prometheus.enable": {
@@ -7237,6 +7237,7 @@
             "type": "directory"
         },
         "title_image": {
+            "default": "images/custom/logo.svg",
             "group": "webui",
             "section": "style",
             "order": 3,

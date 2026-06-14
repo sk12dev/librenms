@@ -1,12 +1,5 @@
 @if($image)
-    {{-- Include svgs inline so they can use currentColor for light/dark mode, but only if they are hosted on the same server (browser will reject it otherwise) --}}
-    @if($is_svg)
-        <svg {{ $attributes->class(['tw:dark:text-white', 'tw:text-gray-600']) }} style="max-height: 64px">
-            <use href="{{ asset($image) }}"></use>
-        </svg>
-    @else
-        <img {{ $attributes }} src="{{ asset($image) }}" alt="{{ $text }}">
-    @endif
+    <img {{ $attributes }} src="{{ asset($image) }}" alt="{{ $text }}">
 @else
     <svg {{ $attributes->class(['tw:dark:text-white', 'tw:text-gray-600', 'tw:max-h-64'])->class($responsive ? ['tw:hidden', $logo_show_class] : []) }}
          style="max-height: 64px"
